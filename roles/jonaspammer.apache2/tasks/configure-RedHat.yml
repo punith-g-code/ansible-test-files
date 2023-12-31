@@ -1,0 +1,36 @@
+---
+- name: Enable configured Apache mods (Debian).
+  ansible.builtin.copy:
+    dest: "{{ apache__server_root_dir }}/conf.modules.d/99-ansible-{{ item }}.conf"
+    content: |
+      LoadModule {{ item }}_module modules/mod_{{ item }}.so
+    mode: 0644
+  with_items: "{{ apache_mods_enabled }}"
+  notify: restart apache
+
+- name: Disable configured Apache mods (Debian).
+  ansible.builtin.file:
+    path: "{{ apache__server_root_dir }}/conf.modules.d/99-ansible-{{ item }}.conf"
+    state: absent
+  with_items: "{{ apache_mods_disabled }}"
+  notify: restart apache
+
+- name: check if localhost cert exists (RHEL 8 and later)
+  ansible.builtin.stat:
+    path: /etc/pki/tls/certs/localhost.crt
+  register: apache__register_stat_rhel_localhost_cert
+  when: ansible_distribution_major_version | int >= 8
+
+- name: Ensure httpd certs are installed (RHEL 8 and later).
+  ansible.builtin.command: /usr/libexec/httpd-ssl-gencerts
+  when:
+    - ansible_distribution_major_version | int >= 8
+    - not apache__register_stat_rhel_localhost_cert.stat.exists
+
+- name: check whether certificates defined in vhosts exist
+  ansible.builtin.stat: path={{ item.certificate_file }}
+  register: apache__register_looped_stat_of_vhosts_ssl_certificate_files
+  with_items: "{{ apache_vhosts_ssl }}"
+
+- name: include tasks to safely generate vhost
+  ansible.builtin.include_tasks: "_generate_vhost_standard.yml"

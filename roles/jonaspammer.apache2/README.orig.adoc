@@ -1,0 +1,895 @@
+= ansible-role-apache2
+Jonas Pammer <opensource@jonaspammer.at>;
+:toc:
+:toclevels: 2
+:toc-placement!:
+:source-highlighter: rouge
+
+ifdef::env-github[]
+// https://gist.github.com/dcode/0cfbf2699a1fe9b46ff04c41721dda74#admonitions
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+https://galaxy.ansible.com/jonaspammer/apache2[image:https://img.shields.io/badge/available%20on%20ansible%20galaxy-jonaspammer.apache2-brightgreen[Version on Galaxy]]
+// Very Relevant Status Badges
+https://github.com/JonasPammer/ansible-role-apache2/actions/workflows/ci.yml[image:https://github.com/JonasPammer/ansible-role-apache2/actions/workflows/ci.yml/badge.svg[Testing CI]]
+
+
+An Ansible role for installing Apache2, enabling/disabling modules, configuring its defaults and creating virtual hosts.
+
+
+toc::[]
+
+[[meta]]
+== 🔎 Metadata
+Below you can find information on…
+
+* the role's required Ansible version
+* the role's supported platforms
+* the role's https://docs.ansible.com/ansible/latest/user_guide/playbooks_reuse_roles.html#role-dependencies[role dependencies]
+
+.link:meta/main.yml[]
+[source,yaml]
+----
+include::meta/main.yml[]
+----
+
+
+[[requirements]]
+== 📌 Requirements
+// Any prerequisites that may not be covered by this role or Ansible itself should be mentioned here.
+The Ansible User needs to be able to `become`.
+
+If you are using SSL/TLS (<<apache_vhosts_ssl>>), you will need to provide your own certificate and key files.
+
+If you are using Apache with PHP, I recommend using the
+https://github.com/geerlingguy/ansible-role-php/[geerlingguy.php] role
+to install PHP, and you can either use `mod_php`
+(by adding the proper package, e.g. `libapache2-mod-php5` for Ubuntu, to `php_packages`),
+or by also using
+https://github.com/geerlingguy/ansible-role-apache-php-fpm[`geerlingguy.apache-php-fpm` ]
+to connect Apache to PHP via FPM.
+Please consult the README's of the linked roles for more specific information.
+
+When targeting Solaris-based systems,
+the https://galaxy.ansible.com/community/general[`community.general` collection]
+(containing the `pkg5` module) must be installed on the Ansible controller.
+
+When targeting Suse-based systems,
+https://galaxy.ansible.com/community/general[`community.general` collection]
+(containing the `zypper` module) must be installed on the Ansible controller.
+
+
+[[variables]]
+== 📜 Role Variables
+// A description of the settable variables for this role should go here
+// and any variables that can/should be set via parameters to the role.
+// Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.)
+// should be mentioned here as well.
+
+[source,yaml]
+----
+apache_mods_enabled:
+  - rewrite
+  - ssl
+apache_mods_disabled: []
+----
+(Debian/RHEL only)
+Apache mods to enable or disable (these will be symlinked into the appropriate location).
+Consult the `mods-available` (Debian) / `conf.modules.d` (RHEL) directory inside <<apache__server_root_dir,apache's root directory>> for all the available mods.
+
+[source,yaml]
+----
+apache_listen_ip: "*"
+apache_listen_port: 80
+apache_listen_port_ssl: 443
+----
+The IP address and ports on which apache should be listening.
+Useful if you have another service (like a reverse proxy) listening
+on port 80 or 443 and need to change the defaults.
+
+[source,yaml]
+----
+apache_remove_default_vhost: false
+----
+On Debian/Ubuntu, a default virtualhost is included in Apache's configuration.
+Set this to `true` to remove that default.
+
+[source,yaml]
+----
+apache_state: started
+----
+Set initial apache state.
+Recommended values: `started` or `stopped`
+
+[source,yaml]
+----
+apache_enabled: true
+----
+Set initial apache service status.
+Recommended values: `true` or `false`
+
+[source,yaml]
+----
+apache_restart_state: restarted
+----
+Sets the state to put apache in when a configuration change was made
+(i.e., when the `restart apache` handler has been called).
+Recommended values: `restarted` or `reloaded`
+
+[[apache_default_favicon]]
+[source,yaml]
+----
+apache_default_favicon: favicon.ico
+----
+Path to a file on the local Ansible Controller to be copied to the server
+and used by Apache as a default favicon.
+
+=== Role Variables used for installation
+
+[source,yaml]
+----
+apache_packages: [OS-specific by default, see /defaults directory]
+----
+A list of package names for installing Apache2 and most-necessary utilities.
+
+[source,yaml]
+----
+apache_packages_state: present
+----
+If you have enabled any additional repositories such as
+https://launchpad.net/~ondrej/+archive/ubuntu/apache2[`ondrej/apache2`],
+https://fedoraproject.org/wiki/EPEL[`EPEL`], or
+http://rpms.remirepo.net/[`remi`],
+you may want an easy way to upgrade versions.
+To ensure so, set this to `latest`.
+
+[source,yaml]
+----
+apache_enablerepo: ""
+----
+(RHEL/CentOS only)
+The https://docs.ansible.com/ansible/latest/collections/ansible/builtin/yum_module.html#parameter-enablerepo[repository]
+to use when installing Apache.
+If you'd like later versions of Apache than are available in the OS's core repositories,
+use a repository like
+https://fedoraproject.org/wiki/EPEL[EPEL]
+(which can be installed with the `repo-epel` role).
+
+=== Role Variables used to create Virtual Hosts
+
+[TIP]
+Head over to the <<example_playbooks>>-Section for
+examples showing how the produced VirtualHost-File may look like.
+
+[NOTE]
+====
+This role tries to ensure a *working* apache configuration by running
+https://httpd.apache.org/docs/2.4/programs/httpd.html[syntax tests for all configuration files (`-t`)]
+and reverting the generated virtualhost if an error occurred.
+====
+
+[source,yaml]
+----
+apache_create_vhosts: true
+apache_vhosts_filename: "vhosts.conf"
+apache_vhosts_template: "vhosts.conf.j2"
+----
+If set to `true`, a vhosts file managed by the variables of this role (see below),
+is created and placed in the Apache configuration folder.
+If set to `false`, you can place your own vhosts file into Apache's configuration folder and skip the convenient (but more basic) one added by this role.
+
+You can also override the template used and set a path to your own template,
+if you need to further customize the layout of your VirtualHost.
+
+[source,yaml]
+----
+apache_global_vhost_settings: |
+  DirectoryIndex index.php index.html
+----
+This variable gets used *_outside any <VirtualHost> Directive_*
+in the generated virtualhost file.
+
+[WARNING]
+=====
+You hereby change the configurations applied to Apache's general context
+(instead of changing the configurations applied to, for example, a `<VirtualHost>`/ `<Directory>`/…).
+
+A thing to understand with this default value is that
+*the `DirectoryIndex` does not _set_ but rather _append_*
+(Meaning we do not reverse any other configuration made),
+as noted on its Documentation page:
+
+[quote,https://httpd.apache.org/docs/2.4/mod/mod_dir.html]
+____
+Multiple `DirectoryIndex` directives within the same context will add to
+the list of resources to look for rather than replace.
+____
+=====
+
+[source,yaml]
+----
+apache_vhosts:
+  - servername: "local.dev"
+    documentroot: "/var/www/html"
+----
+For each entry in this list,
+a `<VirtualHost>`-Directive listening to
+`{{ apache_listen_ip }}:{{ apache_listen_port }}`
+will be generated.
+
+Each entry of a list may have the following properties
+(Consult the <<example_playbooks>>-Section for Examples.
+Consult the linked official documentation pages for the documentation
+of the actual Apache Directives they represent).
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#servername[servername]` (required)::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#serveralias[serveralias]`::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#serveradmin[serveradmin]`::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#documentroot[documentroot]`::
+
+`documentroot__link:https://httpd.apache.org/docs/2.4/mod/core.html#servername[allowoverride]`::
+`AllowOverride`-Directive used inside the `<Directory>` of the `DocumentRoot`. +
+Defaults to the value of `apache_vhosts_default_documentroot__allowoverride`.
+
+`documentroot__link:https://httpd.apache.org/docs/2.4/mod/core.html#options[options]`::
+`Options`-Directive used inside the `<Directory>` of the `DocumentRoot`. +
+Defaults to the value of `apache_vhosts_default_documentroot__options`.
+
+https://httpd.apache.org/docs/2.4/mod/mod_log_config.html#logformat[`logformat`]::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#loglevel[loglevel]`::
+
+[[apache_vhosts__errorlog]]
+`https://httpd.apache.org/docs/2.4/mod/core.html#errorlog[errorlog]`::
+Either a string  (representing the path. does not get automatically quoted)
+or a complex data type:
++
+====
+`path`::
+Path.
+Gets enquoted in `"`.
+
+`extra`::
+Additional String to append after `path`.
+
+`extra_parameters`::
+This variable gets inserted as-is *before* the actual `ErrorLog` statement
+(with an indent of 2).
++
+The use case for this parameter may be to enable Conditional Logs using
+`SetEnvIf` / `SetEnv` or setting a custom `LogFormat` for this ErrorLog
+https://httpd.apache.org/docs/2.4/logs.html[Apache's core Documentation].
+====
+
+[[apache_vhosts__customlogs]]
+`https://httpd.apache.org/docs/2.4/mod/mod_log_config.html#customlog[customlogs]`::
+Array of CustomLogs.
+Each Entry may either be a string (does not get automatically quoted)
+or a complex data type:
++
+====
+`path`::
+Path.
+Gets enquoted in `"`.
+
+`extra`::
+Additional String to append after `path`.
+Does not get quoted
+(to allow for the complex additional optional parameters of CustomLog one may want to supply).
+
+
+`extra_parameters`::
+This variable gets inserted as-is *before* the actual `CustomLog` statement
+(with an indent of 2).
++
+The use case for this parameter may be to enable Conditional Logs using
+`SetEnvIf` / `SetEnv` or setting a custom `LogFormat` for this specifc CustomLog
+as per https://httpd.apache.org/docs/2.4/logs.html[Apache's mod_log_config Documentation].
+====
+
+
+`extra_parameters`::
+This variable gets inserted as-is into the very end of the looped `<VirtualHost>` (with an indent of 2).
+
+
+[[apache_vhosts_ssl]]
+[source,yaml]
+----
+apache_vhosts_ssl: []
+----
+
+For each entry in this list,
+a `<VirtualHost>`-Directive listening to
+`{{ apache_listen_ip }}:{{ apache_listen_port_ssl }}`
+will be generated.
+
+Each entry of a list may have the following properties
+(Consult the <<example_playbooks>>-Section for Examples)
+(Consult the linked official documentation pages for the documentation
+of the actual Apache Directives they represent).
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#servername[servername]` (required)::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#serveralias[serveralias]`::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#serveradmin[serveradmin]`::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#documentroot[documentroot]`::
+
+`documentroot__link:https://httpd.apache.org/docs/2.4/mod/core.html#servername[allowoverride]`::
+`AllowOverride`-Directive used inside the `<Directory>` of the `DocumentRoot`. +
+Defaults to `apache_vhosts_default_documentroot__allowoverride`.
+
+`documentroot__link:https://httpd.apache.org/docs/2.4/mod/core.html#options[options]`::
+`Options`-Directive used inside the `<Directory>` of the `DocumentRoot`.
+Defaults to `apache_vhosts_default_documentroot__options`.
+
+`no_actual_ssl`::
+If set to True, the `<VirtualHost>` will have no SSL* Options.
+Used only when you want a http-to-https redirect you defined in `extra_parameters`.
+
+https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslcertificatefile[ssl_certificate_file] (required)::
+https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslcertificatekeyfile[ssl_certificate_key_file] (required)::
+https://httpd.apache.org/docs/current/mod/mod_ssl.html#sslcertificatechainfile[ssl_certificate_chain_file]::
+_Please note that this Deprecated._
+
+
+https://httpd.apache.org/docs/2.4/mod/mod_log_config.html#logformat[`logformat`]::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#loglevel[loglevel]`::
+
+`https://httpd.apache.org/docs/2.4/mod/core.html#errorlog[errorlog]`::
+Equivalent of <<apache_vhosts__errorlog,apache_vhosts.errorlog>>.
+
+`https://httpd.apache.org/docs/2.4/mod/mod_log_config.html#customlog[customlogs]`::
+Array of CustomLogs.
+Equivalent of <<apache_vhosts__customlogs,apache_vhosts.customlogs>>.
+
+
+`extra_parameters`::
+This variable gets inserted as-is into the very end of the looped `<VirtualHost>` (with an indent of 2).
+
+
+[source,yaml]
+----
+apache_ignore_missing_ssl_certificate: true
+----
+If set to `false`, a given entry of `apache_vhosts_ssl`
+will only be generated if its `sslcertificatefile` exists.
+
+[source,yaml]
+----
+apache_ssl_protocol: "All -SSLv2 -SSLv3"
+apache_ssl_cipher_suite: "AES256+EECDH:AES256+EDH"
+----
+These variable are used as default for every `apache_vhosts_ssl`.
+They are named the same way as used in said Role variables
+(except for their prefix of course).
+Consult https://httpd.apache.org/docs/current/mod/mod_ssl.html[
+Apache's Documentation]
+for the documentation of the actual Apache Directives they represent.
+
+
+[source,yaml]
+----
+apache_vhosts_default_documentroot__allowoverride: "All"
+apache_vhosts_default_documentroot__options: "-Indexes +FollowSymLinks"
+----
+
+
+[[public_vars]]
+== 📜 Facts/Variables defined by this role
+
+Each variable listed in this section
+is dynamically defined when executing this role (and can only be overwritten using `ansible.builtin.set_facts`) _and_
+is meant to be used not just internally.
+
+
+[[apache__service]]
+.`pass:[apache__service]`
+****
+.Example Usage outside this role:
+[source,yaml]
+----
+# handlers file for roles.xyz
+- name: restart apache2
+  ansible.builtin.service:
+    name: "{{ apache__service | default('apache2') }}"
+    state: restarted
+----
+****
+
+
+[[apache__daemon]]
+.`pass:[apache__daemon_dir]`, `pass:[apache__daemon]`
+****
+Executable Name and Directory of the `apache2` command.
+****
+
+
+[[apache__server_root_dir]]
+.`pass:[apache__server_root_dir]`
+****
+Directory containing all Apache2 configuration (in `/etc`).
+****
+
+[[debian_is_different_note]]
+[NOTE]
+====
+When working with any of the below configuration values you need to remember:
+
+[quote,Comment found in a Debian 10's /etc/apache2/apache2.conf]
+______
+The Apache 2 web server configuration in *Debian is quite different to
+upstream's suggested way* to configure the web server. This is because Debian's
+default Apache2 installation attempts to make adding and removing modules,
+virtual hosts, and extra configuration directives as flexible as possible, in
+order to make automating the changes and administering the server as easy as
+possible.
+______
+
+This means that the `pass:[apache__server_root_dir]`
+*on Debian* looks like this:
+
+.`tree /etc/apache2` of a fresh Debian 10 machine after apache2 install
+----
+.
+├── apache2.conf
+├── conf-available
+│   ├── charset.conf
+│   ├── localized-error-pages.conf
+│   ├── other-vhosts-access-log.conf
+│   ├── php7.4-fpm.conf
+│   ├── security.conf
+│   └── serve-cgi-bin.conf
+├── conf-enabled
+│   ├── charset.conf -> ../conf-available/charset.conf
+│   └── …
+├── envvars
+├── magic
+├── mods-available
+│   ├── access_compat.load
+│   ├── alias.load
+│   ├── alias.conf
+│   └── …
+├── mods-enabled
+│   ├── access_compat.load -> ../mods-available/access_compat.load
+│   ├── alias.conf -> ../mods-available/alias.conf
+│   ├── alias.load -> ../mods-available/alias.load
+│   └── …
+├── ports.conf
+├── sites-available
+│   ├── 000-default.conf
+│   └── default-ssl.conf
+└── sites-enabled
+    └── 000-default.conf -> ../sites-available/000-default.conf
+----
+
+While #on other systems it looks like this#:
+
+.`tree /etc/apache2` of a fresh CentOS 8 machine after apache2 install
+----
+.
+├── conf
+│   ├── httpd.conf
+│   └── magic
+├── conf.d
+│   ├── autoindex.conf
+│   ├── ssl.conf
+│   ├── userdir.conf
+│   └── welcome.conf
+├── conf.modules.d
+│   ├── 00-base.conf
+│   ├── 00-dav.conf
+│   ├── 00-lua.conf
+│   ├── 00-mpm.conf
+│   ├── 00-optional.conf
+│   ├── 00-proxy.conf
+│   ├── 00-ssl.conf
+│   ├── 00-systemd.conf
+│   ├── 01-cgi.conf
+│   ├── 10-h2.conf
+│   ├── 10-proxy_h2.conf
+│   └── README
+├── logs -> ../../var/log/httpd
+│   └── …
+└── modules -> ../../usr/lib64/httpd/modules
+    ├── mod_access_compat.so
+    ├── mod_actions.so
+    ├── mod_alias.so
+    └── …
+----
+====
+
+
+[[apache__primary_configuration_file_path]]
+.`pass:[apache__primary_configuration_file_path]`
+****
+Apache2's primary configuration file,
+which http://httpd.apache.org/docs/2.4/mod/core.html#include[
+`Include`]'s all the other files and contains some other Directives itself.
+
+.Taking a look into how what is Include'ed
+[TIP]
+====
+Debian's Apache2 Include Directives as found in `pass:[apache__primary_configuration_file_path]`:
+
+[source,ini]
+----
+# Include module configuration:
+IncludeOptional mods-enabled/*.load
+IncludeOptional mods-enabled/*.conf
+
+# Include list of ports to listen on
+Include ports.conf
+
+# Include of directories ignores editors' and dpkg's backup files,
+# Include generic snippets of statements
+
+IncludeOptional conf-enabled/*.conf
+# Include the virtual host configurations:
+IncludeOptional sites-enabled/*.conf
+----
+
+RHEL's Apache2 Include Directives as found in `pass:[apache__primary_configuration_file_path]` on a CentOS 8 Machine:
+
+[source,ini]
+----
+# Dynamic Shared Object (DSO) Support
+#
+# To be able to use the functionality of a module which was built as a DSO you
+# have to place corresponding `LoadModule' lines at this location so the
+# directives contained in it are actually available _before_ they are used.
+# Statically compiled modules (those listed by `httpd -l') do not need
+# to be loaded here.
+#
+# Example:
+# LoadModule foo_module modules/mod_foo.so
+Include conf.modules.d/*.conf
+
+# Supplemental configuration:
+IncludeOptional conf.d/*.conf
+----
+====
+****
+
+
+[[apache__ports_configuration_file]]
+.`pass:[apache__ports_configuration_file]`
+*****
+Apache2 Configuration File that houses the directives used
+to determine listening ports for incoming connections.
+
+On some systems this is the same as `pass:[apache__primary_configuration_file_path]`,
+but on some it is an own file which is being
+http://httpd.apache.org/docs/2.4/mod/core.html#include[
+`Include`]-ed by said `pass:[apache__primary_configuration_file_path]`.
+*****
+
+
+[[apache__server_conf_dir]]
+.`pass:[apache__server_conf_dir]`
+****
+Directory which houses all http://httpd.apache.org/docs/2.4/mod/core.html#include[
+`Include`]-ed files.
+
+This directory may not be `Include`-ed itself but have sub-directories that are being `Include`-ed.
+Consult the NOTE/TIP found in <<apache__primary_configuration_file_path>>
+to know what Directories are being `Include`-ed by default on different OS'es.
+****
+
+[[apache__default_log_dir]]
+.`pass:[apache__default_log_dir]`
+****
+Directory in `/var` used by default for all virtual hosts.
+
+The below output shows the typical default file contents
+of this folder for the major distros:
+
+.RedHat
+----
+[root@instance-py3-ansible-5 /]# ls -l /var/log/httpd/
+total 8
+-rw-r--r-- 1 root root   0 Jun 11 11:16 access_log
+-rw-r--r-- 1 root root 980 Jun 11 11:16 error_log
+-rw-r--r-- 1 root root   0 Jun 11 11:16 ssl_access_log
+-rw-r--r-- 1 root root 328 Jun 11 11:16 ssl_error_log
+-rw-r--r-- 1 root root   0 Jun 11 11:16 ssl_request_log
+----
+
+.Debian
+----
+root@instance-py3-ansible-5-debian10:/# ls -l /var/log/apache2
+total 4
+-rw-r----- 1 root adm     0 Aug 29 10:17 access.log
+-rw-r----- 1 root adm  2133 Aug 29 10:18 error.log
+-rw-r--r-- 1 root root    0 Aug 29 10:18 local2-error.log
+-rw-r----- 1 root adm     0 Aug 29 10:17 other_vhosts_access.log
+----
+****
+
+
+[[tags]]
+== 🏷️ Tags
+
+// Checkout https://github.com/tribe29/ansible-collection-tribe29.checkmk/blob/main/roles/server/README.md#tags
+// for an awesome example of grouping tasks using tags
+
+Tasks are tagged with the following
+https://docs.ansible.com/ansible/latest/user_guide/playbooks_tags.html#adding-tags-to-roles[tags]:
+
+[cols="1,1"]
+|===
+|Tag | Purpose
+
+2+| This role does not have officially documented tags yet.
+
+// | download-xyz
+// |
+// | install-prerequisites
+// |
+// | install
+// |
+// | create-xyz
+// |
+|===
+
+You can use Ansible to skip tasks, or only run certain tasks by using these tags. By default, all tasks are run when no tags are specified.
+
+
+[[dependencies]]
+== 👫 Dependencies
+// A list of other roles should go here,
+// plus any details in regard to parameters that may need to be set for other roles,
+// or variables that are used from other roles.
+
+
+
+[[example_playbooks]]
+== 📚 Example Playbook Usages
+// Including examples of how to use this role in a playbook for common scenarios is always nice for users.
+
+[NOTE]
+====
+This role is part of https://github.com/JonasPammer/ansible-roles[
+many compatible purpose-specific roles of mine].
+
+The machine needs to be prepared.
+In CI, this is done in `molecule/resources/prepare.yml`
+which sources its soft dependencies from `requirements.yml`:
+
+.link:molecule/resources/prepare.yml[]
+[source,yaml]
+----
+include::molecule/resources/prepare.yml[]
+----
+
+The following diagram is a compilation of the "soft dependencies" of this role
+as well as the recursive tree of their soft dependencies.
+
+image:https://raw.githubusercontent.com/JonasPammer/ansible-roles/master/graphs/dependencies_apache2.svg[
+requirements.yml dependency graph of jonaspammer.apache2]
+====
+
+
+.Standard Installation (no variables)
+====
+* The following yaml:
++
+[source,yaml]
+----
+roles:
+  - jonaspammer.apache2
+----
++
+generates the following VirtualHost:
++
+[source]
+-----
+# Ansible managed
+DirectoryIndex index.php index.html
+<VirtualHost *:80>
+    ServerName local.dev
+    DocumentRoot "/var/www/html"
+
+    <Directory "/var/www/html">
+        AllowOverride All
+        Options -Indexes +FollowSymLinks
+        Require all granted
+    </Directory>
+</VirtualHost>
+-----
++
+For Reference, this is the default vhost shipped with Debian/Ubuntu systems
+(which can be removed by setting `apache_remove_default_vhost` to true)
++
+[source]
+-----
+<VirtualHost *:80>
+        ServerAdmin webmaster@localhost
+        DocumentRoot /var/www/html
+
+        ErrorLog ${APACHE_LOG_DIR}/error.log
+        CustomLog ${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+-----
+
+Given no role configuration, the deviance's from just installing Apache2 yourself are
+
+* certain modules get activated by default (`<<apache_mods_enabled>>`).
+* the system will have the above demonstrated VirtualHost
+* On initial install, a file with the name of `favicon.ico` (sourced from <<apache_default_favicon>>) will be placed into `/var/www/html`
+if there was no file with said name before. This favicon, by default, resembles the Ansible logo as found on Wikimedia.
+
+_Please note that this role does *not* delete the contents of `/var/www/html`
+(not even if it got created by/after apache2 initial install)._
+====
+
+
+.Logging
+====
+* The following yaml:
++
+[source,yaml]
+----
+roles:
+  - jonaspammer.apache2
+
+vars:
+  apache_vhost_filename: "local2.dev.conf"
+  apache_vhosts:
+    - servername: "wwww.local2.dev"
+      loglevel: info
+      errorlog: "{{ apache__default_log_dir }}/local2-error.log"
+      customlog:
+        path: "${{ apache__default_log_dir }}/local2-access.log"
+        extra: "combined"
+----
++
+generates the following VirtualHost:
++
+[source]
+-----
+# Ansible managed.
+
+TODO
+-----
+====
+
+
+.Usage of `extra_parameters`
+====
+[TIP]
+======
+The pipe symbol at the end of a line in YAML signifies that any indented text that follows
+should be interpreted as a multi-line scalar value.
+See https://yaml-multiline.info/[yaml-multiline.info] for interactive explanation.
+======
+
+* The following yaml:
++
+[source,yaml]
+----
+roles:
+  - jonaspammer.apache2
+
+vars:
+  apache_vhost_filename: "myvhost.conf"
+  apache_vhosts:
+    - servername: "www.local.dev"
+      serveralias: "local.dev"
+      documentroot: "/var/www/html"
+      extra_parameters: |
+          # Redirect all requests to 'www' subdomain. Apache 2.4+
+          RewriteEngine On
+          RewriteCond %{HTTP_HOST} !^www\. [NC]
+          RewriteRule ^(.*)$ %{REQUEST_SCHEME}://www.%{HTTP_HOST}%{REQUEST_URI} [R=302,L]
+----
++
+generates the following VirtualHost:
++
+[source]
+-----
+# Ansible managed.
+
+TODO
+-----
+
+
+* The following yaml:
++
+[source,yaml]
+----
+roles:
+  - jonaspammer.apache2
+
+vars:
+  apache_vhost_filename: "myvhost.conf"
+  apache_vhosts:
+    - servername: "srvcmk.intra.jonaspammer.com"
+      extra_parameters: |
+        Redirect / {{ checkmk_site_url }}
+
+----
++
+generates the following VirtualHost:
++
+[source]
+-----
+# Ansible managed.
+DirectoryIndex index.php index.html
+<VirtualHost *:80>
+    ServerName srvcmk.intra.jonaspammer.com
+
+    Redirect / http://srvcmk.intra.jonaspammer.at/master
+</VirtualHost>
+-----
+====
+
+.Creating your own virtualhost file / Integrate into a role
+====
+_The apache2 role may be executed multiple times in a play, with the primary purpose of
+https://docs.ansible.com/ansible/latest/user_guide/playbooks_reuse_roles.html#using-allow-duplicates-true[this allowance]
+being to be able to create virtualhosts._
+
+[source,yaml,subs="+quotes,macros"]
+----
+- tasks:
+    pass:[#]...
+    - name: Generate Apache2 VirtualHost.
+      ansible.builtin.#include_role#: "apache2"
+      vars:
+        #apache_vhost_filename: "myapp.conf"#
+        apache_vhosts:
+          - servername: "www.myapp.dev"
+            serveralias: "myapp.dev"
+            DocumentRoot: "/opt/myapp"
+    pass:[#]...
+----
+====
+
+
+[[development]]
+== 📝 Development
+// Badges about Conventions in this Project
+https://conventionalcommits.org[image:https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg[Conventional Commits]]
+https://results.pre-commit.ci/latest/github/JonasPammer/ansible-role-apache2/master[image:https://results.pre-commit.ci/badge/github/JonasPammer/ansible-role-apache2/master.svg[pre-commit.ci status]]
+// image:https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white[pre-commit, link=https://github.com/pre-commit/pre-commit]
+
+include::DEVELOPMENT.adoc[]
+
+
+[[contributing]]
+== 💪 Contributing
+image:https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square[PRs Welcome]
+https://open.vscode.dev/JonasPammer/ansible-role-apache2[image:https://img.shields.io/static/v1?logo=visualstudiocode&label=&message=Open%20in%20Visual%20Studio%20Code&labelColor=2c2c32&color=007acc&logoColor=007acc[Open in Visual Studio Code]]
+
+include::CONTRIBUTING.adoc[]
+
+
+[[changelog]]
+== 🗒 Changelog
+Please refer to the
+https://github.com/JonasPammer/ansible-role-apache2/releases[Release Page of this Repository]
+for a human changelog of the corresponding
+https://github.com/JonasPammer/ansible-role-apache2/tags[Tags (Versions) of this Project].
+
+Note that this Project adheres to Semantic Versioning.
+Please report any accidental breaking changes of a minor version update.
+
+
+[[license]]
+== ⚖️ License
+
+.link:LICENSE[]
+----
+include::LICENSE[]
+----

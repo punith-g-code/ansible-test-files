@@ -1,0 +1,41 @@
+---
+- name: Enable configured Apache mods (Debian).
+  ansible.builtin.file:
+    src: "{{ apache__server_root_dir }}/mods-available/{{ item }}.load"
+    dest: "{{ apache__server_root_dir }}/mods-enabled/{{ item }}.load"
+    state: link
+    mode: 0644
+  with_items: "{{ apache_mods_enabled }}"
+  notify: restart apache
+
+- name: Disable configured Apache mods (Debian).
+  ansible.builtin.file:
+    path: "{{ apache__server_root_dir }}/mods-enabled/{{ item }}.load"
+    state: absent
+  with_items: "{{ apache_mods_disabled }}"
+  notify: restart apache
+
+- name: check whether certificates defined in vhosts exist
+  ansible.builtin.stat: "path={{ item.certificate_file }}"
+  register: apache__register_looped_stat_of_vhosts_ssl_certificate_files
+  with_items: "{{ apache_vhosts_ssl }}"
+
+- name: Remove default vhost from Debians 'sites-enabled' directory (when configured).
+  ansible.builtin.file:
+    path: "{{ apache__server_conf_dir }}/sites-enabled/{{ apache__default_vhost_filename }}"
+    state: absent
+  notify: restart apache
+  when: apache_remove_default_vhost
+
+- name: Add symlink in Debians 'sites-enabled' directory and ensure correct mode.
+  ansible.builtin.file:
+    src: "{{ apache__server_conf_dir }}/sites-available/{{ apache_vhosts_filename }}"
+    dest: "{{ apache__server_conf_dir }}/sites-enabled/{{ apache_vhosts_filename }}"
+    state: link
+    mode: 0644
+    force: true
+  notify: restart apache
+  when: apache_create_vhosts | bool
+
+- name: include tasks to safely generate vhost
+  ansible.builtin.include_tasks: "_generate_vhost_standard.yml"

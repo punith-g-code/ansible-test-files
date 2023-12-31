@@ -1,0 +1,75 @@
+---
+# defaults file of ansible-role jonaspammer.apache2
+# See README.adoc for documentation. If you change a default here, also update it in the README.
+
+_apache_packages:
+  Debian:
+    - apache2
+    - apache2-utils
+  RedHat:
+    - httpd
+    - httpd-devel
+    - mod_ssl
+    - openssh
+  Suse:
+    - apache2
+    - openssh
+  Solaris:
+    - web/server/apache-24
+    - web/server/apache-24/module/apache-ssl
+    - web/server/apache-24/module/apache-security
+  Amazon_NA:
+    - httpd24
+    - httpd24-devel
+    - mod24_ssl
+    - openssh
+
+apache_packages: "{{
+  _apache_packages[ansible_distribution ~ '_' ~ ansible_distribution_major_version]|default(
+  _apache_packages[ansible_os_family ~ '_' ~ ansible_distribution_major_version])|default(
+  _apache_packages[ansible_distribution])|default(
+  _apache_packages[ansible_os_family])|default(
+  _apache_packages['default']) }}"
+
+apache_packages_state: present
+
+apache_enablerepo: ""
+
+apache_listen_ip: "*"
+apache_listen_port: 80
+apache_listen_port_ssl: 443
+
+apache_state: started
+apache_enabled: true
+apache_restart_state: restarted
+
+apache_mods_enabled:
+  - rewrite
+  - ssl
+apache_mods_disabled: []
+
+apache_default_favicon: favicon.ico # shipped with this role
+
+### VirtualHost Variables ###
+apache_create_vhosts: true
+apache_vhosts_filename: "vhosts.conf"
+apache_vhosts_template: "vhosts.conf.j2"
+
+apache_remove_default_vhost: false
+
+apache_global_vhost_settings: |
+  DirectoryIndex index.php index.html
+
+apache_vhosts:
+  - servername: "local.dev"
+    documentroot: "/var/www/html"
+
+apache_vhosts_default_documentroot__allowoverride: "All"
+apache_vhosts_default_documentroot__options: "-Indexes +FollowSymLinks"
+
+apache_vhosts_ssl: []
+
+apache_ignore_missing_ssl_certificate: true
+
+apache_ssl_protocol: "All -SSLv2 -SSLv3"
+apache_ssl_cipher_suite: "AES256+EECDH:AES256+EDH"

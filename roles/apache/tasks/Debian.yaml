@@ -1,0 +1,44 @@
+    - name: check apache and if not present then install
+      apt:
+       name: "{{ package_name }}"
+       state: latest
+       update_cache: yes
+
+    - name: check the service status and it will keep the service in started state
+      service:
+        name: "{{ service_name }}"
+        enabled: yes
+        state: started
+
+    - name: copy index.html to destination path /var/www/html
+      copy:
+        src: "{{ index_file }}"
+        dest: "{{ document_root }}/{{ index_file }}"
+
+
+    - name: copy apache configuration of is present in the /var/www/html
+      template:
+         src: amol.conf
+         dest: /etc/apache2/sites-available/amol.conf
+      notify: Restart apache2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

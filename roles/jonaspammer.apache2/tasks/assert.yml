@@ -1,0 +1,45 @@
+---
+# tasks file for testing that variables of ansible-role jonaspammer.apache2 are set correctly
+# https://docs.ansible.com/ansible/latest/user_guide/playbooks_tests.html
+
+- name: test if 'apache_packages' is set correctly
+  ansible.builtin.assert:
+    that:
+      - apache_packages is defined
+      - apache_packages is string or apache_packages is iterable
+    quiet: true
+
+- name: test if 'apache_mods_enabled' is set correctly
+  ansible.builtin.assert:
+    that:
+      - apache_mods_enabled is defined
+      - apache_mods_enabled is iterable
+    quiet: true
+
+- name: test if 'apache_mods_disabled' is set correctly
+  ansible.builtin.assert:
+    that:
+      - apache_mods_disabled is defined
+      - apache_mods_disabled is iterable
+    quiet: true
+
+- name: test if 'apache_remove_default_vhost' is set correctly
+  ansible.builtin.assert:
+    that:
+      - apache_remove_default_vhost is defined
+      - apache_remove_default_vhost is boolean
+    quiet: true
+
+- name: test if 'apache_listen_port' is set correctly
+  ansible.builtin.assert:
+    that:
+      - apache_listen_port is defined
+      - apache_listen_port is integer
+    quiet: true
+
+- name: test if 'apache_listen_port_ssl' is set correctly
+  ansible.builtin.assert:
+    that:
+      - apache_listen_port_ssl is defined
+      - apache_listen_port_ssl is integer
+    quiet: true

@@ -1,0 +1,48 @@
+- hosts: webserver
+  remote_user: ubuntu
+  become_user: root
+  become_method: sudo
+  become: yes
+
+  vars:
+    package_name: apache2
+    index_file: index.php
+    document_root: /var/www/html/
+    website1: amol.com
+    website2: devops.com
+    website1_root: /var/www/amol
+    webiste2_root: /var/www/devops
+
+  tasks:
+    - name: check apache and if not present then install
+      apt:
+       name: "{{ package_name }}"
+       state: latest
+       update_cache: yes
+
+    - name: copy index.html to destination path /var/www/html
+      copy:
+        src: "/etc/ansible/files/{{ index_file }}"
+        dest: "{{ document_root }}/{{ index_file }}"
+
+    - name: mkfolder
+      file:
+         path: /var/www/amol
+         state: directory
+
+    - name: copy folder
+      copy:
+          src: /etc/ansible/files/test.html
+          dest: /var/www/amol/index.html
+
+    - name: copy apache configuration of is present in the /var/www/html
+      template:
+         src: /etc/ansible/files/amonl.conf
+         dest: /etc/apache2/sites-available/amol.conf
+      notify: Restart apache2
+
+  handlers:
+    - name: Restart apache2
+      service: 
+        name: apache2
+        state: restarted

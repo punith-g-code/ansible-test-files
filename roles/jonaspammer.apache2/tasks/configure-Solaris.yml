@@ -1,0 +1,3 @@
+---
+- name: include tasks to safely generate vhost
+  ansible.builtin.include_tasks: "_generate_vhost_standard.yml"
